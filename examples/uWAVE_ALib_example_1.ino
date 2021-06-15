@@ -69,7 +69,7 @@ void setup()
 }
 
 void loop() {
-  result = uWrapper.process(); // This function should be called as frequent as possible
+  result = uWrapper.process(); // this function should be called as often as possible
 
   if (result != uWAVE_NONE)    // If something is happend in the uWrapper...
   {
