@@ -470,9 +470,7 @@ bool uWAVE::RC_ASYNC_IN_Parse()
           msr = Str_ParseFloat(_in_buffer, stIdx, ndIdx);
         break;
       case 3:
-        if (ndIdx < stIdx)
-          result = false;
-        else
+        if (ndIdx > stIdx)          
           azimuth = Str_ParseFloat(_in_buffer, stIdx, ndIdx);
         break;
     }
@@ -755,13 +753,13 @@ bool uWAVE::D_INFO_Parse()
         if (ndIdx < stIdx)
           result = false;
         else
-          _txChID = Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
+          _rxChID = Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
         break;
       case 8:
         if (ndIdx < stIdx)
           result = false;
         else
-          _rxChID = Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
+          _txChID = Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
         break;
       case 9:
         if (ndIdx < stIdx)
@@ -898,6 +896,7 @@ uWAVE::uWAVE(SoftwareSerial *port, int cmd_pin)
   _cmd_pin = cmd_pin;
   
   pinMode(_cmd_pin, OUTPUT);
+  digitalWrite(_cmd_pin, LOW);
 
   _isPktMode = uWAVE_UNDEFINED_VAL;
   _pktModeLocalAddress = uWAVE_UNDEFINED_VAL;
@@ -1000,10 +999,10 @@ uWAVE_EVENT_Enum uWAVE::process()
             }
             break;
   
-            case IC_D2H_RC_ASYNC_IN:
+            case IC_D2H_RC_ASYNC_IN:            
             if (RC_ASYNC_IN_Parse())
             {
-              result |= uWAVE_ASYNC_IN_RECEIVED;            
+              result |= uWAVE_ASYNC_IN_RECEIVED;
             }
             break;
   
@@ -1327,24 +1326,24 @@ bool uWAVE::queryForSettingsUpdate(byte txChID, byte rxChID, float salinityPSU, 
   {
     Str_WriterInit(  _out_buffer, &_out_buffer_idx, uWAVE_OUT_BUFFER_SIZE);
     Str_WriteStr(    _out_buffer, &_out_buffer_idx, "$PUWV1,\0");
-    Str_WriteIntDec( _out_buffer, &_out_buffer_idx, rxChID, 0);
-    Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_PAR_SEP);
     Str_WriteIntDec( _out_buffer, &_out_buffer_idx, txChID, 0);
     Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_PAR_SEP);
-    Str_WriteFloat(  _out_buffer, &_out_buffer_idx, salinityPSU, 0, 1);
+    Str_WriteIntDec( _out_buffer, &_out_buffer_idx, rxChID, 0);
+    Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_PAR_SEP);
+    Str_WriteFloat(  _out_buffer, &_out_buffer_idx, salinityPSU, 1, 0);
     Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_PAR_SEP);
     Str_WriteIntDec( _out_buffer, &_out_buffer_idx, isCmdModeByDefault, 0);
     Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_PAR_SEP);
     Str_WriteIntDec( _out_buffer, &_out_buffer_idx, isACKOnTxFinished, 0);
     Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_PAR_SEP);
-    Str_WriteFloat(  _out_buffer, &_out_buffer_idx, gravityAcc, 0, 4);    
+    Str_WriteFloat(  _out_buffer, &_out_buffer_idx, gravityAcc, 4, 0);    
     Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_CHK_SEP);
     Str_WriteHexByte(_out_buffer, &_out_buffer_idx, 0);
     Str_WriteStr(    _out_buffer, &_out_buffer_idx, (byte*)"\r\n");
     NMEA_CheckSum_Update(_out_buffer, _out_buffer_idx);
 
     _port->write(_out_buffer, _out_buffer_idx);
-
+        
     _isWaitingLocal = true;
     _last_request_ts = millis();
     _last_request_sntID = IC_H2D_SETTINGS_WRITE;    
