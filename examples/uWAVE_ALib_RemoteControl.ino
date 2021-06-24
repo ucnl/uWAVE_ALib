@@ -201,7 +201,7 @@ void loop()
   }
   else
   {
-    if (!uWrapper.isWaitingLocal())     // make sure that we do not waiting an answer from our local modem
+    if (!uWrapper.isWaitingLocal())     // make sure that we are not waiting an answer from our local modem
     {
       if (!uWrapper.deviceInfoUpdated())
       {
