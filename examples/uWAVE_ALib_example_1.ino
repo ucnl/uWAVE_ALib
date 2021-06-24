@@ -1,7 +1,11 @@
 #include <SoftwareSerial.h>
 #include "uWAVE_ALib.h"
 
-/*  Hardware list:
+/*  
+ * For compiling this sketch uses uWAVE_ALib library, that can be found on github:
+ * https://github.com/ucnl/uWAVE_ALib
+ *   
+ * Hardware list:
  *  
  *    1. Arduino UNO/Nano compatible board - 1 pcs
  *    2. uWAVE modem - at least 1 pcs
@@ -25,6 +29,8 @@
  *  - query for packet mode settings
  *  - sending periodic remote requests
  *   
+ * For more information about uWave interfacing protocol, please refer: 
+ * https://docs.unavlab.com/documentation/EN/uWAVE/uWAVE_Protocol_Specification_en.html
  */
 
 
@@ -69,7 +75,7 @@ void setup()
 }
 
 void loop() {
-  result = uWrapper.process(); // this function should be called as often as possible
+  result = uWrapper.process(); // This function should be called as frequent as possible
 
   if (result != uWAVE_NONE)    // If something is happend in the uWrapper...
   {
