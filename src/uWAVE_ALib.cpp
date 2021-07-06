@@ -622,12 +622,13 @@ bool uWAVE::PT_FAILED_Parse()
 
 bool uWAVE::PT_DLVRD_Parse()
 {
-  // $PUWVI,tareget_ptAddress,triesTaken,dataPacket
+  // $PUWVI,tareget_ptAddress,triesTaken,[azimuth],dataPacket
   byte stIdx = 0, ndIdx = 0, pIdx = 0;
   bool result = true, isNotLastParam;
 
   byte target_ptAddress = 255;
   byte triesTaken = 255;
+  float azimuth = uWAVE_UNDEFINED_FLOAT_VAL;
     
   do
   {
@@ -647,6 +648,10 @@ bool uWAVE::PT_DLVRD_Parse()
           triesTaken = (byte)Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
         break;
       case 3:
+        if (ndIdx > stIdx)          
+          azimuth = Str_ParseFloat(_in_buffer, stIdx, ndIdx);
+        break;
+      case 4:
         if ((ndIdx < stIdx) || (Str_ReadHexStr(_in_buffer, stIdx, ndIdx, _pkt_out_packet, uWAVE_PKT_MAX_SIZE, &_pkt_out_size) != 0))
           result = false;
         break;
@@ -659,6 +664,7 @@ bool uWAVE::PT_DLVRD_Parse()
   {
     _pkt_tries_taken = triesTaken;
     _pkt_target_address = target_ptAddress;
+    _rem_azimuth_deg = azimuth;
   }
 
   return result;
@@ -669,6 +675,7 @@ bool uWAVE::PT_RCVD_Parse()
   // $PUWVJ,sender_ptAddress,dataPacket
   byte stIdx = 0, ndIdx = 0, pIdx = 0;
   bool result = true, isNotLastParam;
+  float azimuth = uWAVE_UNDEFINED_FLOAT_VAL;
 
   byte sender_ptAddress = 255;
     
@@ -684,6 +691,10 @@ bool uWAVE::PT_RCVD_Parse()
           sender_ptAddress = byte(_in_buffer[stIdx]);
         break;
       case 2:
+        if (ndIdx > stIdx)          
+          azimuth = Str_ParseFloat(_in_buffer, stIdx, ndIdx);
+        break; 
+      case 3:
         if ((ndIdx < stIdx) || (Str_ReadHexStr(_in_buffer, stIdx, ndIdx, _pkt_in_packet, uWAVE_PKT_MAX_SIZE, &_pkt_in_size) != 0))
           result = false;
         break;
@@ -695,6 +706,7 @@ bool uWAVE::PT_RCVD_Parse()
   if (result)
   {
     _pkt_sender_address = sender_ptAddress;
+    _rem_azimuth_deg = azimuth;
   }
 
   return result;

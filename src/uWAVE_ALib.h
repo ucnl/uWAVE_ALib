@@ -104,6 +104,7 @@ typedef enum uWAVE_RC_CODES_Enum
   RC_USR_CMD_006 = 13,
   RC_USR_CMD_007 = 14,
   RC_USR_CMD_008 = 15,
+  RC_MSG_ASYNC   = 16,
   RC_INVALID
 };
 
