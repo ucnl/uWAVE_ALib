@@ -37,8 +37,12 @@
 // Configuration of this sketch ------------------------------------------------------------------------------------
 #define SPEED_OF_SOUND     (1500)
 
+#define USE_PKT_MODE
+
 #define REMOTE_MODEM_TX_ID (0)
 #define REMOTE_MODEM_RX_ID (1)
+#define REMOTE_PKT_ADDR    (0)
+#define REMOTE_PKT_DID     (DID_DPT)
 
 #define REMOTE_REQUEST_PERIOD_MS (5000)
 
@@ -106,6 +110,13 @@ void loop() {
       Serial.println(uWrapper.getRem_msr_dB());
       Serial.print(F("value="));
       Serial.println(uWrapper.getRem_value());
+
+      float f = uWrapper.getRem_azimuth_deg();
+      if (uWAVE_IF_FLOAT_VALID(f))
+      {
+        Serial.print("Azimuth, °=");
+        Serial.println(f);
+      }
     }    
     else if (result & uWAVE_DEVICE_INFO_RECEIVED)
     {      
@@ -151,7 +162,7 @@ void loop() {
       float f = uWrapper.getRem_azimuth_deg();
       if (uWAVE_IF_FLOAT_VALID(f))
       {
-        Serial.print("_rem_azimuth_deg, °=");
+        Serial.print("Azimuth, °=");
         Serial.println(f);
       }
     }
@@ -207,6 +218,13 @@ void loop() {
       Serial.print(F("pkt_target_address="));
       Serial.println(uWrapper.getPkt_target_address());
 
+      float f = uWrapper.getRem_azimuth_deg();
+      if (uWAVE_IF_FLOAT_VALID(f))
+      {
+        Serial.print("Azimuth, °=");
+        Serial.println(f);
+      }
+
       Serial.print(F("Packet: "));
       uWrapper.getPkt_delivered(pkt, &pkt_size);
       for (int i = 0; i < pkt_size; i++)
@@ -222,6 +240,13 @@ void loop() {
 
       Serial.print(F("pkt_sender_address="));
       Serial.println(uWrapper.getPkt_sender_address());
+
+      float f = uWrapper.getRem_azimuth_deg();
+      if (uWAVE_IF_FLOAT_VALID(f))
+      {
+        Serial.print("Azimuth, °=");
+        Serial.println(f);
+      }
 
       Serial.print(F("Packet: "));
       uWrapper.getPkt_received(pkt, &pkt_size);
@@ -250,6 +275,33 @@ void loop() {
       }
       Serial.println();
     }
+    else if (result & uWAVE_PKT_ITG_RESULT_RECEIVED)
+    {      
+      Serial.println(F("[PACKET ITG RESULT RECEIVED]"));      
+      Serial.print(F("Target address="));
+      Serial.println(uWrapper.getPkt_target_address());
+      Serial.print(F("Requested data ID="));
+      Serial.println(uWrapper.getPkt_ITG_DataID());
+
+      float f;
+
+      f = uWrapper.getPkt_ITG_DataValue();
+      if (uWAVE_IF_FLOAT_VALID(f))
+      {
+         Serial.print("Data value=");
+         Serial.println(f);        
+      }
+
+      Serial.print(F("Propagation time, s="));
+      Serial.println(uWrapper.getRem_propTime_s());
+
+      f = uWrapper.getRem_azimuth_deg();
+      if (uWAVE_IF_FLOAT_VALID(f))
+      {
+         Serial.print("Azimuth=");
+         Serial.println(f);        
+      }  
+    }
     
     if (result & uWAVE_LOCAL_TIMEOUT)
     {
@@ -269,6 +321,34 @@ void loop() {
       Serial.print(F("requested cmdID="));
       Serial.println(uWrapper.getRem_requested_rcID());      
     }
+
+    if (result & uWAVE_PKT_ACK_TIMEOUT)
+    {
+      Serial.println(F("[PACKET ACK TIMEOUT]"));
+
+      Serial.print(F("Target address="));
+      Serial.println(uWrapper.getPkt_target_address());
+    }
+
+    if (result & uWAVE_PKT_ITG_TIMEOUT)
+    {
+      Serial.println(F("[PACKET ITG TIMEOUT]"));
+
+      Serial.print(F("Target address="));
+      Serial.println(uWrapper.getPkt_target_address());
+      Serial.print(F("Requested data ID="));
+      Serial.println(uWrapper.getPkt_ITG_DataID());
+    }
+
+    if (result & uWAVE_PKT_ITG_TIMEOUT_RECEIVED)
+    {
+      Serial.println(F("[PACKET ITG TIMEOUT RECEIVED]"));
+
+      Serial.print(F("Target address="));
+      Serial.println(uWrapper.getPkt_target_address());
+      Serial.print(F("Requested data ID="));
+      Serial.println(uWrapper.getPkt_ITG_DataID());
+    }    
   }
   else
   {
@@ -295,6 +375,9 @@ void loop() {
         else
            Serial.println(F("Failed to query packet mode settings!"));    
       }
+
+#ifndef USE_PKT_MODE
+      
       else if (!uWrapper.isWaitingRemote() && !uWrapper.isWaitingPacketACK() && (millis() - rem_req_ts >= REMOTE_REQUEST_PERIOD_MS))
       {
         if (uWrapper.queryRemoteModem(REMOTE_MODEM_RX_ID, REMOTE_MODEM_TX_ID, RC_DPT_GET))
@@ -305,6 +388,25 @@ void loop() {
         else
            Serial.println(F("Failed to query a remote modem!"));
       }
+      
+#else
+
+      else if (!uWrapper.isWaitingRemote() && !uWrapper.isWaitingPacketACK() && !uWrapper.isWaitingPacketITG() && (millis() - rem_req_ts >= REMOTE_REQUEST_PERIOD_MS))
+      {
+        if (uWrapper.queryForPktITG(REMOTE_PKT_ADDR, REMOTE_PKT_DID))
+        {
+           Serial.println(F("Querying a remote modem..."));
+           rem_req_ts = millis();
+        }
+        else
+           Serial.println(F("Failed to query a remote modem!"));
+      }
+
+#endif
+
+
+
+      
     }
   }
 }
