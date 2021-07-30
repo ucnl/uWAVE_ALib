@@ -316,11 +316,11 @@ bool uWAVE::ACK_Parse()
         _isWaitingRemote = true;
         _rem_request_ts = millis();    
       }
-      if (sntID == IC_H2D_AMB_DTA_CFG)
+      else if (sntID == IC_H2D_AMB_DTA_CFG)
       {
         _ambConfigUpdated = true;
       }
-      if (sntID == IC_H2D_PT_SEND)
+      else if (sntID == IC_H2D_PT_SEND)
       {        
         if (_pkt_out_size == 0)
            _isWaitingPacketACK = false; // ACK for AbortSend
@@ -329,6 +329,11 @@ bool uWAVE::ACK_Parse()
           _isWaitingPacketACK = true; // ACK for packet send
           _pkt_sent_ts = millis();
         }
+      }
+      else if (sntID == IC_H2D_PT_ITG)
+      {
+        _isWaitingPacketITG = true;
+        _pt_itg_ts = millis();
       }
     }
   }
@@ -470,7 +475,9 @@ bool uWAVE::RC_ASYNC_IN_Parse()
           msr = Str_ParseFloat(_in_buffer, stIdx, ndIdx);
         break;
       case 3:
-        if (ndIdx > stIdx)          
+        if (ndIdx < stIdx)
+          result = false;
+        else
           azimuth = Str_ParseFloat(_in_buffer, stIdx, ndIdx);
         break;
     }
@@ -622,7 +629,7 @@ bool uWAVE::PT_FAILED_Parse()
 
 bool uWAVE::PT_DLVRD_Parse()
 {
-  // $PUWVI,tareget_ptAddress,triesTaken,[azimuth],dataPacket
+  // $PUWVI,tareget_ptAddress,[azimuth],triesTaken,dataPacket
   byte stIdx = 0, ndIdx = 0, pIdx = 0;
   bool result = true, isNotLastParam;
 
@@ -642,14 +649,14 @@ bool uWAVE::PT_DLVRD_Parse()
           target_ptAddress = byte(_in_buffer[stIdx]);
         break;
       case 2:
+        if (ndIdx > stIdx)
+          azimuth = Str_ParseFloat(_in_buffer, stIdx, ndIdx);
+        break;
+      case 3:
         if (ndIdx < stIdx)
           result = false;
         else
           triesTaken = (byte)Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
-        break;
-      case 3:
-        if (ndIdx > stIdx)          
-          azimuth = Str_ParseFloat(_in_buffer, stIdx, ndIdx);
         break;
       case 4:
         if ((ndIdx < stIdx) || (Str_ReadHexStr(_in_buffer, stIdx, ndIdx, _pkt_out_packet, uWAVE_PKT_MAX_SIZE, &_pkt_out_size) != 0))
@@ -664,7 +671,9 @@ bool uWAVE::PT_DLVRD_Parse()
   {
     _pkt_tries_taken = triesTaken;
     _pkt_target_address = target_ptAddress;
-    _rem_azimuth_deg = azimuth;
+
+    if (azimuth != uWAVE_UNDEFINED_FLOAT_VAL)
+       _rem_azimuth_deg = azimuth;
   }
 
   return result;
@@ -672,12 +681,12 @@ bool uWAVE::PT_DLVRD_Parse()
 
 bool uWAVE::PT_RCVD_Parse()
 {
-  // $PUWVJ,sender_ptAddress,dataPacket
+  // $PUWVJ,sender_ptAddress,[azimuth],dataPacket
   byte stIdx = 0, ndIdx = 0, pIdx = 0;
   bool result = true, isNotLastParam;
-  float azimuth = uWAVE_UNDEFINED_FLOAT_VAL;
 
   byte sender_ptAddress = 255;
+  float azimuth = uWAVE_UNDEFINED_FLOAT_VAL;
     
   do
   {
@@ -691,9 +700,10 @@ bool uWAVE::PT_RCVD_Parse()
           sender_ptAddress = byte(_in_buffer[stIdx]);
         break;
       case 2:
-        if (ndIdx > stIdx)          
+        if (ndIdx > stIdx)
           azimuth = Str_ParseFloat(_in_buffer, stIdx, ndIdx);
-        break; 
+        break;
+         break;
       case 3:
         if ((ndIdx < stIdx) || (Str_ReadHexStr(_in_buffer, stIdx, ndIdx, _pkt_in_packet, uWAVE_PKT_MAX_SIZE, &_pkt_in_size) != 0))
           result = false;
@@ -706,11 +716,127 @@ bool uWAVE::PT_RCVD_Parse()
   if (result)
   {
     _pkt_sender_address = sender_ptAddress;
-    _rem_azimuth_deg = azimuth;
+
+    if (azimuth != uWAVE_UNDEFINED_FLOAT_VAL)
+       _rem_azimuth_deg = azimuth;
   }
 
   return result;
 }
+
+bool uWAVE::PT_ITG_TMO_Parse()
+{
+  // $PUWVL,target_ptAddress,pt_itg_dataID
+  byte stIdx = 0, ndIdx = 0, pIdx = 0;
+  bool result = true, isNotLastParam;
+
+  byte target_ptAddress = 255;
+  DataID_Enum dataID = DID_INVALID;
+  
+  do
+  {
+    isNotLastParam = NMEA_GetNextParam(_in_buffer, ndIdx + 1, _in_buffer_idx, &stIdx, &ndIdx);    
+    switch (pIdx)
+    {
+      case 1:
+        if (ndIdx < stIdx)
+          result = false;
+        else
+          target_ptAddress = (byte)Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
+        break;
+      case 2:
+        if (ndIdx < stIdx)
+          result = false;
+        else
+          dataID = Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
+        break;
+    }
+
+    pIdx++;
+  } while (result && isNotLastParam);
+
+  if (result)
+  {
+    _pkt_target_address = target_ptAddress;
+    _pkt_itg_dataID = dataID;
+  }
+
+  return result;
+}
+
+bool uWAVE::PT_ITG_RES_Parse()
+{
+  // $PUWVM,target_ptAddress,pt_itg_dataID,[dataValue],pTime,[azimuth]
+  byte stIdx = 0, ndIdx = 0, pIdx = 0;
+  bool result = true, isNotLastParam;
+
+  byte target_ptAddress = 255;
+  DataID_Enum dataID = DID_INVALID;
+  float dataValue = uWAVE_UNDEFINED_FLOAT_VAL;
+  float pTime = uWAVE_UNDEFINED_FLOAT_VAL;
+  float azimuth = uWAVE_UNDEFINED_FLOAT_VAL;
+  
+  do
+  {
+    isNotLastParam = NMEA_GetNextParam(_in_buffer, ndIdx + 1, _in_buffer_idx, &stIdx, &ndIdx);    
+    switch (pIdx)
+    {
+      case 1:
+        if (ndIdx < stIdx)
+          result = false;
+        else
+          target_ptAddress = (byte)Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
+      break;
+      
+      case 2:
+        if (ndIdx < stIdx)
+          result = false;
+        else
+          dataID = Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
+      break;
+
+      case 3:
+        if (ndIdx >= stIdx)          
+          dataValue = Str_ParseFloat(_in_buffer, stIdx, ndIdx);
+      break;
+
+      case 4:
+        if (ndIdx < stIdx)
+          result = false;
+        else
+          pTime = Str_ParseFloat(_in_buffer, stIdx, ndIdx);
+      break;
+
+      case 5:
+      if (ndIdx >= stIdx)
+          azimuth = Str_ParseFloat(_in_buffer, stIdx, ndIdx);
+      break;
+    }
+
+    pIdx++;
+  } while (result && isNotLastParam);
+
+  if (result)
+  {
+    _pkt_target_address = target_ptAddress;
+    _pkt_itg_dataID = dataID;
+
+    if (dataValue != uWAVE_UNDEFINED_FLOAT_VAL)
+      _pkt_itg_dataValue = dataValue;
+
+    _rem_propTime_s = pTime;
+
+    if (azimuth != uWAVE_UNDEFINED_FLOAT_VAL)
+      _rem_azimuth_deg = azimuth;
+  }
+
+  return result;
+}
+
+
+
+
+
 
 bool uWAVE::D_INFO_Parse()
 {
@@ -765,13 +891,13 @@ bool uWAVE::D_INFO_Parse()
         if (ndIdx < stIdx)
           result = false;
         else
-          _rxChID = Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
+          _txChID = Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
         break;
       case 8:
         if (ndIdx < stIdx)
           result = false;
         else
-          _txChID = Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
+          _rxChID = Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
         break;
       case 9:
         if (ndIdx < stIdx)
@@ -908,7 +1034,6 @@ uWAVE::uWAVE(SoftwareSerial *port, int cmd_pin)
   _cmd_pin = cmd_pin;
   
   pinMode(_cmd_pin, OUTPUT);
-  digitalWrite(_cmd_pin, LOW);
 
   _isPktMode = uWAVE_UNDEFINED_VAL;
   _pktModeLocalAddress = uWAVE_UNDEFINED_VAL;
@@ -1011,10 +1136,10 @@ uWAVE_EVENT_Enum uWAVE::process()
             }
             break;
   
-            case IC_D2H_RC_ASYNC_IN:            
+            case IC_D2H_RC_ASYNC_IN:
             if (RC_ASYNC_IN_Parse())
             {
-              result |= uWAVE_ASYNC_IN_RECEIVED;
+              result |= uWAVE_ASYNC_IN_RECEIVED;            
             }
             break;
   
@@ -1064,6 +1189,23 @@ uWAVE_EVENT_Enum uWAVE::process()
               _deviceInfoUpdated = true;
             }
             break;
+
+            case IC_D2H_PT_TMO:
+            if (PT_ITG_TMO_Parse())
+            {
+              result |= uWAVE_PKT_ITG_TIMEOUT;
+              _isWaitingRemote = false;              
+            }
+            break;
+            
+            case IC_D2H_PT_ITG_RESP:
+            if (PT_ITG_RES_Parse())
+            {
+              result |= uWAVE_PKT_ITG_RESULT_RECEIVED;
+              _isWaitingRemote = false;
+            }
+            break;
+            
             default:
                break;  
          }
@@ -1095,8 +1237,17 @@ uWAVE_EVENT_Enum uWAVE::process()
     {
       if (ts - _pkt_sent_ts > uWAVE_PKT_SEND_TIMEOUT_MS)
       {
-        result |= uWAVE_REMOTE_PACKET_TIMEOUT;
+        result |= uWAVE_PKT_ACK_TIMEOUT;
         _isWaitingPacketACK = false;
+      }
+    }
+
+    if (_isWaitingPacketITG)
+    {      
+      if (ts - _pt_itg_ts > uWAVE_REM_TIMEOUT_MS)
+      {
+        result |= uWAVE_PKT_ITG_TIMEOUT;
+        _isWaitingPacketITG = false;
       }
     }
   }
@@ -1199,6 +1350,12 @@ bool uWAVE::isWaitingPacketACK()
   return _isWaitingPacketACK;
 }
 
+bool uWAVE::isWaitingPacketITG()
+{
+  return _isWaitingPacketITG;
+}
+
+
 uWAVE_ERR_CODES_Enum uWAVE::getACK_result()
 {
   return _ACK_result;
@@ -1294,6 +1451,19 @@ void uWAVE::getPkt_received(byte* data, byte* dataSize)
   *dataSize = _pkt_in_size;
 }
 
+DataID_Enum uWAVE::getPkt_ITG_DataID()
+{
+  return _pkt_itg_dataID;
+}
+
+float uWAVE::getPkt_ITG_DataValue()
+{
+  return _pkt_itg_dataValue;
+}
+
+
+
+
 float uWAVE::getAmb_pressure_mBar()
 {
   return _amb_pressure_mBar;
@@ -1338,24 +1508,24 @@ bool uWAVE::queryForSettingsUpdate(byte txChID, byte rxChID, float salinityPSU, 
   {
     Str_WriterInit(  _out_buffer, &_out_buffer_idx, uWAVE_OUT_BUFFER_SIZE);
     Str_WriteStr(    _out_buffer, &_out_buffer_idx, "$PUWV1,\0");
-    Str_WriteIntDec( _out_buffer, &_out_buffer_idx, txChID, 0);
-    Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_PAR_SEP);
     Str_WriteIntDec( _out_buffer, &_out_buffer_idx, rxChID, 0);
     Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_PAR_SEP);
-    Str_WriteFloat(  _out_buffer, &_out_buffer_idx, salinityPSU, 1, 0);
+    Str_WriteIntDec( _out_buffer, &_out_buffer_idx, txChID, 0);
+    Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_PAR_SEP);
+    Str_WriteFloat(  _out_buffer, &_out_buffer_idx, salinityPSU, 0, 1);
     Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_PAR_SEP);
     Str_WriteIntDec( _out_buffer, &_out_buffer_idx, isCmdModeByDefault, 0);
     Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_PAR_SEP);
     Str_WriteIntDec( _out_buffer, &_out_buffer_idx, isACKOnTxFinished, 0);
     Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_PAR_SEP);
-    Str_WriteFloat(  _out_buffer, &_out_buffer_idx, gravityAcc, 4, 0);    
+    Str_WriteFloat(  _out_buffer, &_out_buffer_idx, gravityAcc, 0, 4);    
     Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_CHK_SEP);
     Str_WriteHexByte(_out_buffer, &_out_buffer_idx, 0);
     Str_WriteStr(    _out_buffer, &_out_buffer_idx, (byte*)"\r\n");
     NMEA_CheckSum_Update(_out_buffer, _out_buffer_idx);
 
     _port->write(_out_buffer, _out_buffer_idx);
-        
+
     _isWaitingLocal = true;
     _last_request_ts = millis();
     _last_request_sntID = IC_H2D_SETTINGS_WRITE;    
@@ -1523,6 +1693,35 @@ bool uWAVE::queryForPktSend(byte targetPktAddress, byte maxTries, byte* data, by
     _isWaitingLocal = true;
     _last_request_ts = millis();
     _last_request_sntID = IC_H2D_PT_SEND;
+    
+    return true;
+  }
+  else
+     return false;
+}
+
+bool uWAVE::queryForPktITG(byte targetPktAddress, DataID_Enum dataID)
+{
+  if (_enabled && !_isWaitingLocal && !_isWaitingRemote && !_isWaitingPacketITG && (dataID != DID_INVALID))
+  {
+    Str_WriterInit(  _out_buffer, &_out_buffer_idx, uWAVE_OUT_BUFFER_SIZE);
+    Str_WriteStr(    _out_buffer, &_out_buffer_idx, "$PUWVK,\0");
+    Str_WriteIntDec( _out_buffer, &_out_buffer_idx, targetPktAddress, 0);
+    Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_PAR_SEP);
+    Str_WriteIntDec( _out_buffer, &_out_buffer_idx, dataID, 0);
+    Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_CHK_SEP);
+    Str_WriteHexByte(_out_buffer, &_out_buffer_idx, 0);
+    Str_WriteStr(    _out_buffer, &_out_buffer_idx, (byte*)"\r\n");
+    NMEA_CheckSum_Update(_out_buffer, _out_buffer_idx);
+
+    _port->write(_out_buffer, _out_buffer_idx);
+     
+    _pkt_target_address = targetPktAddress;
+    _pkt_itg_dataID = dataID;    
+
+    _isWaitingLocal = true;
+    _last_request_ts = millis();
+    _last_request_sntID = IC_H2D_PT_ITG;
     
     return true;
   }

@@ -30,7 +30,6 @@
 
 #define HEX_DIGIT2B(b)            ((b) >= 0x41 ? ((b) - 0x37) : ((b) - 0x30))
 #define DIGIT_2HEX(h)             ((h) > 9     ? ((h) + 0x37) : ((h) + 0x30))
-                              
 
 #define C2B(b)                    ((b - '0'))
 #define CC2B(b1, b2)              ((10 * (b1 - '0') + (b2 - '0')))
@@ -60,6 +59,10 @@
 #define IC_D2H_PT_FAILED          'H'        // $PUWVH,tareget_ptAddress,triesTaken,dataPacket
 #define IC_D2H_PT_DLVRD           'I'        // $PUWVI,tareget_ptAddress,triesTaken,dataPacket
 #define IC_D2H_PT_RCVD            'J'        // $PUWVJ,sender_ptAddress,dataPacket
+
+#define IC_H2D_PT_ITG             'K'        // $PUWVK,target_ptAddress,pt_itg_dataID
+#define IC_D2H_PT_TMO             'L'        // $PUWVL,target_ptAddress,pt_itg_dataID
+#define IC_D2H_PT_ITG_RESP        'M'        // $PUWVM,target_ptAddress,pt_itg_dataID,[dataValue],pTime,[azimuth]
 //
 
 #define IC_H2D_DINFO_GET          '?'        // $PUWV?,reserved
@@ -71,19 +74,22 @@
 
 typedef enum uWAVE_EVENT_Enum
 {
-  uWAVE_NONE                     = 0,
-  uWAVE_ACK_RECEIVED             = 2,
-  uWAVE_LOCAL_TIMEOUT            = 4,
-  uWAVE_REMOTE_RESPONSE_RECEIVED = 8,
-  uWAVE_REMOTE_TIMEOUT           = 16,
-  uWAVE_DEVICE_INFO_RECEIVED     = 32,
-  uWAVE_ASYNC_IN_RECEIVED        = 64,
-  uWAVE_AMB_DATA_RECEIVED        = 128,
-  uWAVE_PKT_SETTINGS_RECEIVED    = 256,
-  uWAVE_PKT_DELIVERED            = 512,
-  uWAVE_PKT_RECEIVED             = 1024,
-  uWAVE_PKT_SEND_FAILED          = 2048,
-  uWAVE_REMOTE_PACKET_TIMEOUT    = 4096,
+  uWAVE_NONE                      = 0,
+  uWAVE_ACK_RECEIVED              = 2,
+  uWAVE_LOCAL_TIMEOUT             = 4,
+  uWAVE_REMOTE_RESPONSE_RECEIVED  = 8,
+  uWAVE_REMOTE_TIMEOUT            = 16,
+  uWAVE_DEVICE_INFO_RECEIVED      = 32,
+  uWAVE_ASYNC_IN_RECEIVED         = 64,
+  uWAVE_AMB_DATA_RECEIVED         = 128,
+  uWAVE_PKT_SETTINGS_RECEIVED     = 256,
+  uWAVE_PKT_DELIVERED             = 512,
+  uWAVE_PKT_RECEIVED              = 1024,
+  uWAVE_PKT_SEND_FAILED           = 2048,
+  uWAVE_PKT_ACK_TIMEOUT           = 4096,
+  uWAVE_PKT_ITG_TIMEOUT           = 8192,
+  uWAVE_PKT_ITG_RESULT_RECEIVED   = 16384,
+  uWAVE_PKT_ITG_TIMEOUT_RECEIVED  = 32768
 };
 
 typedef enum uWAVE_RC_CODES_Enum
@@ -107,6 +113,16 @@ typedef enum uWAVE_RC_CODES_Enum
   RC_MSG_ASYNC   = 16,
   RC_INVALID
 };
+
+typedef enum DataID_Enum
+{
+  DID_DPT = 0,
+  DID_TMP = 1,
+  DID_BAT = 2,
+  DID_INVALID
+
+};
+
 
 typedef enum uWAVE_ERR_CODES_Enum
 {
@@ -160,6 +176,7 @@ class uWAVE
     bool isWaitingLocal();
     bool isWaitingRemote();
     bool isWaitingPacketACK();
+    bool isWaitingPacketITG();
 
     // refactor
     byte _serial[24];
@@ -190,6 +207,9 @@ class uWAVE
     void getPkt_received(byte* data, byte* dataSize);
     void getPkt_failed(byte* data, byte* dataSize);
 
+    DataID_Enum getPkt_ITG_DataID();
+    float getPkt_ITG_DataValue();
+
     float getAmb_pressure_mBar();
     float getAmb_depth_m();
     float getAmb_temperature_C();
@@ -205,7 +225,8 @@ class uWAVE
     bool queryForPktModeSettingsUpdate(bool isSaveToFlash, bool isPktMode, byte localAddress);
     bool queryForPktAbortSend();
     bool queryForPktSend(byte targetPktAddress, byte* data, byte dataSize);
-    bool queryForPktSend(byte targetPktAddress, byte maxTries, byte* data, byte dataSize);   
+    bool queryForPktSend(byte targetPktAddress, byte maxTries, byte* data, byte dataSize);    
+    bool queryForPktITG(byte targetPktAddress, DataID_Enum dataID);
     
   private:
     SoftwareSerial *_port;
@@ -233,6 +254,7 @@ class uWAVE
     bool _isWaitingLocal;
     bool _isWaitingRemote;
     bool _isWaitingPacketACK;
+    bool _isWaitingPacketITG;
 
     byte _out_buffer_idx;
     byte _out_buffer[uWAVE_OUT_BUFFER_SIZE];
@@ -264,6 +286,10 @@ class uWAVE
     byte _pkt_tries_taken;
     byte _pkt_target_address;
     byte _pkt_sender_address;
+    long _pt_itg_ts;
+    
+    float _pkt_itg_dataValue;
+    DataID_Enum _pkt_itg_dataID;
     
     byte _pkt_out_packet[uWAVE_PKT_MAX_SIZE];
     byte _pkt_out_size;
@@ -319,6 +345,8 @@ class uWAVE
     bool PT_FAILED_Parse();
     bool PT_DLVRD_Parse();
     bool PT_RCVD_Parse();
+    bool PT_ITG_TMO_Parse();
+    bool PT_ITG_RES_Parse();
     bool D_INFO_Parse();
 };
 
