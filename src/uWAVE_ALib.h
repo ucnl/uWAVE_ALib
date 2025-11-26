@@ -50,6 +50,10 @@
 #define IC_H2D_AMB_DTA_CFG        '6'        // $PUWV6,isSaveInFlash,periodMs,isPrs,isTemp,isDpt,isBatV
 #define IC_D2H_AMB_DTA            '7'        // $PUWV7,prs_mBar,temp_C,dpt_m,batVoltage_V
 
+// For interfacing with uWave USBL devices
+#define IC_H2D_INC_DTA_CFG        '8'        // $PUWV8,isSaveInFlash,periodMs,
+#define IC_D2H_INC_DTA            '9'        // $PUWV9,[reserved empty field],pitch,roll
+
 // packet mode
 #define IC_H2D_PT_SETTINGS_READ   'D'        // $PUWVD,reserved
 #define IC_D2H_PT_SETTINGS        'E'        // $PUWVE,isPTMode,ptAddress
@@ -65,12 +69,24 @@
 #define IC_D2H_PT_ITG_RESP        'M'        // $PUWVM,target_ptAddress,pt_itg_dataID,[dataValue],pTime,[azimuth]
 //
 
-#define IC_H2D_DINFO_GET          '?'        // $PUWV?,reserved
-#define IC_D2H_DINFO              '!'        // $PUWV!,serialNumber,sys_moniker,sys_version,core_moniker [release],core_version,acBaudrate,rxChID,txChID,isCmdMode
+// AQPNG Mode
+#define IC_H2D_AQPNG_SETTINGS_READ 'N'        // $PUWVN,reserved
+#define IC_HDH_AQPNG_SETTINGS      'O'        // $PUWVO,[isSaveInFlash],AQPN_ModeID,[periodMs],[rcCmdID],[rcTxID],[rcRxID],[isPT],[pt_targetAddr]
+//
+
+#define IC_H2D_DINFO_GET          '?'         // $PUWV?,reserved
+#define IC_D2H_DINFO              '!'         // $PUWV!,serialNumber,sys_moniker,sys_version,core_moniker [release],core_version,acBaudrate,rxChID,txChID,isCmdMode
 
 #define IC_D2H_UNKNOWN            '-'
 
 
+typedef enum uWAVE_AQPNG_Mode_Enum
+{
+  AQPNG_DISABLED = 0,
+  AQPNG_PINGER   = 1,
+  AQPNG_MASTER   = 2,
+  AQPNG_INVALID
+};
 
 typedef enum uWAVE_EVENT_Enum
 {
@@ -89,7 +105,9 @@ typedef enum uWAVE_EVENT_Enum
   uWAVE_PKT_ACK_TIMEOUT           = 4096,
   uWAVE_PKT_ITG_TIMEOUT           = 8192,
   uWAVE_PKT_ITG_RESULT_RECEIVED   = 16384,
-  uWAVE_PKT_ITG_TIMEOUT_RECEIVED  = 32768
+  uWAVE_PKT_ITG_TIMEOUT_RECEIVED  = 32768,
+  uWAVE_AQPNG_SETTINGS_RECEIVED   = 65536,
+  uWAVE_INC_DATA_RECEIVED         = 131072,
 };
 
 typedef enum uWAVE_RC_CODES_Enum
@@ -122,7 +140,6 @@ typedef enum DataID_Enum
   DID_INVALID
 
 };
-
 
 typedef enum uWAVE_ERR_CODES_Enum
 {
@@ -214,6 +231,17 @@ class uWAVE
     float getAmb_depth_m();
     float getAmb_temperature_C();
     float getAmb_voltage_V();
+
+    float getInc_pitch_deg();
+    float getInc_roll_deg();
+
+    uWAVE_AQPNG_Mode_Enum getAQPNG_mode();
+    int getAQPNG_periodMs();
+    DataID_Enum getAQPNG_DataID();
+    byte getAQPNG_rcTxID();
+    byte getAQPNG_rcRxID();
+    bool getAQPNG_isPT();
+    byte getAQPNG_pt_targetAddr();   
     
     
     bool queryForDeviceInfo();
@@ -227,6 +255,11 @@ class uWAVE
     bool queryForPktSend(byte targetPktAddress, byte* data, byte dataSize);
     bool queryForPktSend(byte targetPktAddress, byte maxTries, byte* data, byte dataSize);    
     bool queryForPktITG(byte targetPktAddress, DataID_Enum dataID);
+
+    bool queryForInclinometerDataConfig(bool isSaveToFlash, int periodMs);
+    
+    bool queryForAQPNGSettingsRead();
+    bool queryForAQPNGSettingsWrite(bool isSaveToFlash, uWAVE_AQPNG_Mode_Enum aqpngMode, int periodMs, DataID_Enum rcCmdID, byte rcTxID, byte rcRxID, bool isPT, byte pt_targetAddr);
     
   private:
     SoftwareSerial *_port;
@@ -250,6 +283,8 @@ class uWAVE
 
     bool _deviceInfoUpdated;
     bool _ambConfigUpdated;
+    bool _incConfigUpdated;
+    bool _aqpngConfigUpdated;
 
     bool _isWaitingLocal;
     bool _isWaitingRemote;
@@ -301,7 +336,20 @@ class uWAVE
     float _amb_pressure_mBar;
     float _amb_depth_m;
     float _amb_temperature_C;
-    float _amb_voltage_V;    
+    float _amb_voltage_V;
+
+    // INC data
+    float _inc_pitch_deg;
+    float _inc_roll_deg;
+
+    // AQ/PNG mode
+    uWAVE_AQPNG_Mode_Enum _aqpng_Mode;
+    int _aqpng_periodMs;
+    DataID_Enum _aqpng_DataID;
+    byte _aqpng_rcTxID;
+    byte _aqpng_rcRxID;
+    bool _aqpng_isPT;
+    byte _aqpng_pt_targetAddr;
 
     // parser
     bool NMEA_Process(byte);
@@ -340,13 +388,19 @@ class uWAVE
     bool RC_RESPONSE_Parse();
     bool RC_TIMEOUT_Parse();
     bool RC_ASYNC_IN_Parse();
-    bool AMD_DTA_Parse();
+    bool AMB_DTA_Parse();
+
+    bool INC_DTA_Parse();
+    
     bool PT_SETTINGS_Parse();
     bool PT_FAILED_Parse();
     bool PT_DLVRD_Parse();
     bool PT_RCVD_Parse();
     bool PT_ITG_TMO_Parse();
     bool PT_ITG_RES_Parse();
+
+    bool AQPNG_SETTINGS_Parse();
+    
     bool D_INFO_Parse();
 };
 

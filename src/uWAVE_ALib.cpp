@@ -495,7 +495,7 @@ bool uWAVE::RC_ASYNC_IN_Parse()
   return result;
 }
 
-bool uWAVE::AMD_DTA_Parse()
+bool uWAVE::AMB_DTA_Parse()
 {
   // $PUWV5,rcCmdID,msr,[azimuth]
   byte stIdx = 0, ndIdx = 0, pIdx = 0;
@@ -542,6 +542,44 @@ bool uWAVE::AMD_DTA_Parse()
 
   return result;
 }
+
+bool uWAVE::INC_DTA_Parse()
+{
+  // $PUWV9,,pitch,roll
+  byte stIdx = 0, ndIdx = 0, pIdx = 0;
+  bool result = true, isNotLastParam;
+  
+  float ptc = uWAVE_UNDEFINED_FLOAT_VAL;
+  float roll = uWAVE_UNDEFINED_FLOAT_VAL;
+    
+  do
+  {
+    isNotLastParam = NMEA_GetNextParam(_in_buffer, ndIdx + 1, _in_buffer_idx, &stIdx, &ndIdx);
+    switch (pIdx)
+    {      
+      case 2:
+        if (ndIdx > stIdx)
+          ptc = Str_ParseFloat(_in_buffer, stIdx, ndIdx);
+        break;
+      case 3:
+        if (ndIdx > stIdx)
+          roll = Str_ParseFloat(_in_buffer, stIdx, ndIdx);
+        break;      
+    }
+
+    pIdx++;
+  } while (result && isNotLastParam); 
+
+  if (result)
+  {
+    _inc_pitch_deg = ptc;
+    _inc_roll_deg = roll;
+  }
+
+  return result;
+}
+
+
 
 bool uWAVE::PT_SETTINGS_Parse()
 {
@@ -601,7 +639,7 @@ bool uWAVE::PT_FAILED_Parse()
         if (ndIdx < stIdx)
           result = false;
         else
-          target_ptAddress = byte(_in_buffer[stIdx]);
+          target_ptAddress = Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
         break;
       case 2:
         if (ndIdx < stIdx)
@@ -646,17 +684,17 @@ bool uWAVE::PT_DLVRD_Parse()
         if (ndIdx < stIdx)
           result = false;
         else
-          target_ptAddress = byte(_in_buffer[stIdx]);
+          target_ptAddress = Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
         break;
       case 2:
-        if (ndIdx > stIdx)
-          azimuth = Str_ParseFloat(_in_buffer, stIdx, ndIdx);
-        break;
-      case 3:
         if (ndIdx < stIdx)
           result = false;
         else
           triesTaken = (byte)Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
+        break;        
+      case 3:
+        if (ndIdx > stIdx)
+          azimuth = Str_ParseFloat(_in_buffer, stIdx, ndIdx);
         break;
       case 4:
         if ((ndIdx < stIdx) || (Str_ReadHexStr(_in_buffer, stIdx, ndIdx, _pkt_out_packet, uWAVE_PKT_MAX_SIZE, &_pkt_out_size) != 0))
@@ -697,13 +735,12 @@ bool uWAVE::PT_RCVD_Parse()
         if (ndIdx < stIdx)
           result = false;
         else
-          sender_ptAddress = byte(_in_buffer[stIdx]);
+          sender_ptAddress = Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
         break;
       case 2:
         if (ndIdx > stIdx)
           azimuth = Str_ParseFloat(_in_buffer, stIdx, ndIdx);
-        break;
-         break;
+        break;         
       case 3:
         if ((ndIdx < stIdx) || (Str_ReadHexStr(_in_buffer, stIdx, ndIdx, _pkt_in_packet, uWAVE_PKT_MAX_SIZE, &_pkt_in_size) != 0))
           result = false;
@@ -834,7 +871,79 @@ bool uWAVE::PT_ITG_RES_Parse()
 }
 
 
+bool uWAVE::AQPNG_SETTINGS_Parse()
+{
+  // $PUWVO,[isSaveInFlash],AQPN_ModeID,[periodMs],[rcCmdID],[rcTxID],[rcRxID],[isPT],[pt_targetAddr]
+  byte stIdx = 0, ndIdx = 0, pIdx = 0;
+  bool result = true, isNotLastParam;
 
+  uWAVE_AQPNG_Mode_Enum _mode = AQPNG_INVALID;
+  int _periodMs = -1;
+  DataID_Enum _dataID = DID_INVALID;
+  byte _rcTxID = 0;
+  byte _rcRxID = 0;
+  bool _isPT = 0;
+  byte _pt_targetAddr = 0;
+  
+  do
+  {
+    isNotLastParam = NMEA_GetNextParam(_in_buffer, ndIdx + 1, _in_buffer_idx, &stIdx, &ndIdx);    
+    switch (pIdx)
+    {      
+      case 2:
+        if (ndIdx > stIdx)          
+          _mode = (uWAVE_AQPNG_Mode_Enum)Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
+        else
+          result = false;
+      break;
+      
+      case 3:
+        if (ndIdx > stIdx)
+          _periodMs = Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
+      break;
+
+      case 4:
+        if (ndIdx > stIdx)
+          _dataID = (DataID_Enum)Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
+      break;
+
+      case 5:
+        if (ndIdx > stIdx)
+          _rcTxID = (byte)Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
+      break;
+
+      case 6:
+        if (ndIdx > stIdx)
+          _rcRxID = (byte)Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
+      break;
+
+      case 7:
+        if (ndIdx > stIdx)
+          _isPT = (bool)Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
+      break;
+
+      case 8:
+        if (ndIdx > stIdx)
+          _pt_targetAddr = (byte)Str_ParseIntDec(_in_buffer, stIdx, ndIdx);
+      break;
+    }
+    
+    pIdx++;
+  } while (result && isNotLastParam); 
+
+  if (result)
+  {
+    _aqpng_Mode = _mode;
+    _aqpng_periodMs = _periodMs;
+    _aqpng_DataID = _dataID;
+    _aqpng_rcTxID = _rcTxID;
+    _aqpng_rcRxID = _rcRxID;
+    _aqpng_isPT = _isPT;
+    _aqpng_pt_targetAddr = _pt_targetAddr;
+  }
+
+  return result;
+}
 
 
 
@@ -1144,9 +1253,16 @@ uWAVE_EVENT_Enum uWAVE::process()
             break;
   
             case IC_D2H_AMB_DTA:
-            if (AMD_DTA_Parse())
+            if (AMB_DTA_Parse())
             {
               result |= uWAVE_AMB_DATA_RECEIVED;
+            }
+            break;
+
+            case IC_D2H_INC_DTA:
+            if (INC_DTA_Parse())
+            {
+              result |= uWAVE_INC_DATA_RECEIVED;
             }
             break;
   
@@ -1205,6 +1321,11 @@ uWAVE_EVENT_Enum uWAVE::process()
               _isWaitingRemote = false;
             }
             break;
+
+            case IC_HDH_AQPNG_SETTINGS:
+            {
+              result |= uWAVE_AQPNG_SETTINGS_RECEIVED;
+            }
             
             default:
                break;  
@@ -1485,6 +1606,52 @@ float uWAVE::getAmb_voltage_V()
 }
 
 
+float uWAVE::getInc_pitch_deg()
+{
+  return _inc_pitch_deg;
+}
+
+float uWAVE::getInc_roll_deg()
+{
+  return _inc_roll_deg;
+}
+
+
+uWAVE_AQPNG_Mode_Enum uWAVE::getAQPNG_mode()
+{
+  return _aqpng_Mode;
+}
+
+int uWAVE::getAQPNG_periodMs()
+{
+  return _aqpng_periodMs;
+}
+
+DataID_Enum uWAVE::getAQPNG_DataID()
+{
+  return _aqpng_DataID;
+}
+  
+byte uWAVE::getAQPNG_rcTxID()
+{
+  return _aqpng_rcTxID;
+}
+
+byte uWAVE::getAQPNG_rcRxID()
+{
+  return _aqpng_rcRxID;
+}
+
+bool uWAVE::getAQPNG_isPT()
+{
+  return _aqpng_isPT;
+}
+    
+byte uWAVE::getAQPNG_pt_targetAddr()
+{
+  return _aqpng_pt_targetAddr;
+}
+
 
 bool uWAVE::queryForDeviceInfo()
 {
@@ -1569,6 +1736,35 @@ bool uWAVE::queryForAmbientDataConfig(bool isSaveToFlash, int periodMs, bool isP
   else
      return false;
 }
+
+
+bool uWAVE::queryForInclinometerDataConfig(bool isSaveToFlash, int periodMs)
+{
+  if (_enabled && !_isWaitingLocal)
+  {
+    Str_WriterInit(  _out_buffer, &_out_buffer_idx, uWAVE_OUT_BUFFER_SIZE);
+    Str_WriteStr(    _out_buffer, &_out_buffer_idx, "$PUWV8,\0");
+    Str_WriteIntDec( _out_buffer, &_out_buffer_idx, isSaveToFlash, 0);
+    Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_PAR_SEP);
+    Str_WriteIntDec( _out_buffer, &_out_buffer_idx, periodMs, 0);    
+    Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_CHK_SEP);
+    Str_WriteHexByte(_out_buffer, &_out_buffer_idx, 0);
+    Str_WriteStr(    _out_buffer, &_out_buffer_idx, (byte*)"\r\n");
+    NMEA_CheckSum_Update(_out_buffer, _out_buffer_idx);
+
+    _port->write(_out_buffer, _out_buffer_idx);
+
+    _isWaitingLocal = true;
+    _last_request_ts = millis();
+    _last_request_sntID = IC_H2D_INC_DTA_CFG;
+    
+    return true;
+  }
+  else
+     return false;
+}
+
+
 
 bool uWAVE::queryRemoteModem(byte txChID, byte rxChID, uWAVE_RC_CODES_Enum cmdID)
 {
@@ -1674,7 +1870,7 @@ bool uWAVE::queryForPktSend(byte targetPktAddress, byte maxTries, byte* data, by
     Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_PAR_SEP);
     Str_WriteIntDec( _out_buffer, &_out_buffer_idx, maxTries, 0);    
     Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_PAR_SEP);    
-    Str_WriteHexStr( _out_buffer, &_out_buffer_idx, data, dataSize);
+    Str_WriteHexArray( _out_buffer, &_out_buffer_idx, data, dataSize);
     Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_CHK_SEP);
     Str_WriteHexByte(_out_buffer, &_out_buffer_idx, 0);
     Str_WriteStr(    _out_buffer, &_out_buffer_idx, (byte*)"\r\n");
@@ -1722,6 +1918,72 @@ bool uWAVE::queryForPktITG(byte targetPktAddress, DataID_Enum dataID)
     _isWaitingLocal = true;
     _last_request_ts = millis();
     _last_request_sntID = IC_H2D_PT_ITG;
+    
+    return true;
+  }
+  else
+     return false;
+}
+
+
+
+bool uWAVE::queryForAQPNGSettingsRead()
+{
+  // $PUWVN,reserved  
+  if (_enabled && !_isWaitingLocal)
+  {
+    _port->write("$PUWVN,0*56\r\n");
+
+    _isWaitingLocal = true;
+    _last_request_ts = millis();
+    _last_request_sntID = IC_H2D_AQPNG_SETTINGS_READ;
+    
+    return true;
+  }
+  else
+     return false;
+}
+
+bool uWAVE::queryForAQPNGSettingsWrite(bool isSaveToFlash, uWAVE_AQPNG_Mode_Enum aqpngMode, int periodMs, DataID_Enum dataID, byte rcTxID, byte rcRxID, bool isPT, byte pt_targetAddr)
+{
+  // $PUWVO,[isSaveInFlash],AQPN_ModeID,[periodMs],[rcCmdID],[rcTxID],[rcRxID],[isPT],[pt_targetAddr]
+  
+  if (_enabled && !_isWaitingLocal)
+  {
+    Str_WriterInit(  _out_buffer, &_out_buffer_idx, uWAVE_OUT_BUFFER_SIZE);
+    Str_WriteStr(    _out_buffer, &_out_buffer_idx, "$PUWVO,\0");
+    Str_WriteIntDec( _out_buffer, &_out_buffer_idx, isSaveToFlash, 0);
+    Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_PAR_SEP);
+    Str_WriteIntDec( _out_buffer, &_out_buffer_idx, aqpngMode, 0);
+    Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_PAR_SEP);
+
+    Str_WriteIntDec( _out_buffer, &_out_buffer_idx, periodMs, 0);
+    Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_PAR_SEP);
+
+    Str_WriteIntDec( _out_buffer, &_out_buffer_idx, dataID, 0);
+    Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_PAR_SEP);
+
+    Str_WriteIntDec( _out_buffer, &_out_buffer_idx, rcTxID, 0);
+    Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_PAR_SEP);
+
+    Str_WriteIntDec( _out_buffer, &_out_buffer_idx, rcRxID, 0);
+    Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_PAR_SEP);
+
+    Str_WriteIntDec( _out_buffer, &_out_buffer_idx, isPT, 0);
+    Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_PAR_SEP);
+
+    Str_WriteIntDec( _out_buffer, &_out_buffer_idx, pt_targetAddr, 0);
+        
+    Str_WriteByte(   _out_buffer, &_out_buffer_idx, NMEA_CHK_SEP);
+    Str_WriteHexByte(_out_buffer, &_out_buffer_idx, 0);
+    Str_WriteStr(    _out_buffer, &_out_buffer_idx, (byte*)"\r\n");
+    NMEA_CheckSum_Update(_out_buffer, _out_buffer_idx);
+
+    _port->write(_out_buffer, _out_buffer_idx);
+         
+    _isWaitingLocal = true;
+    _last_request_ts = millis();
+    _last_request_sntID = IC_HDH_AQPNG_SETTINGS;
     
     return true;
   }
