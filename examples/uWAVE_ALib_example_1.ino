@@ -24,7 +24,7 @@
  *   
  *   
  *  After power up, scetch will attempt to send different queries to the modem:
- *  - ask the modem for device information
+ *  - query the modem for device information
  *  - try to change Ambient data settings
  *  - query for packet mode settings
  *  - sending periodic remote requests
@@ -38,11 +38,15 @@
 #define SPEED_OF_SOUND     (1500)
 
 #define USE_PKT_MODE
+#define USE_SEND_PACKETS
 
 #define REMOTE_MODEM_TX_ID (0)
-#define REMOTE_MODEM_RX_ID (1)
+#define REMOTE_MODEM_RX_ID (0)
 #define REMOTE_PKT_ADDR    (0)
 #define REMOTE_PKT_DID     (DID_DPT)
+
+#define PKT_MAX_TRIES      (2)
+#define REMOTE_PKT_SEND_PERIOD_MS (10000)
 
 #define REMOTE_REQUEST_PERIOD_MS (5000)
 
@@ -50,7 +54,7 @@
 #define AMB_IS_TEMPERATURE (true)
 #define AMB_IS_DEPTH       (true)
 #define AMB_IS_VOLTAGE     (true)
-#define AMB_PERIOD_MS      (1) // 0 - do not send, 1 - after any modem output, other value - period in milliseconds
+#define AMB_PERIOD_MS      (0) // 0 - do not send, 1 - after any modem output, other value - period in milliseconds
 //
 
 // Configuration of modem's connection ----------------------------------------------------------------------------
@@ -227,11 +231,8 @@ void loop() {
 
       Serial.print(F("Packet: "));
       uWrapper.getPkt_delivered(pkt, &pkt_size);
-      for (int i = 0; i < pkt_size; i++)
-      {
-        Serial.print(DIGIT_2HEX(pkt[i] / 16));
-        Serial.print(DIGIT_2HEX(pkt[i] % 16));
-      }
+      for (int i = 0; i < pkt_size; i++)      
+        Serial.print(pkt[i], HEX);      
       Serial.println();
     }
     else if (result & uWAVE_PKT_RECEIVED)
@@ -250,11 +251,8 @@ void loop() {
 
       Serial.print(F("Packet: "));
       uWrapper.getPkt_received(pkt, &pkt_size);
-      for (int i = 0; i < pkt_size; i++)
-      {
-        Serial.print(DIGIT_2HEX(pkt[i] / 16));
-        Serial.print(DIGIT_2HEX(pkt[i] % 16));
-      }
+      for (int i = 0; i < pkt_size; i++)      
+        Serial.print(pkt[i], HEX);
       Serial.println();      
     }
     else if (result & uWAVE_PKT_SEND_FAILED)
@@ -268,11 +266,8 @@ void loop() {
 
       Serial.print(F("Packet: "));
       uWrapper.getPkt_failed(pkt, &pkt_size);
-      for (int i = 0; i < pkt_size; i++)
-      {
-        Serial.print(DIGIT_2HEX(pkt[i] / 16));
-        Serial.print(DIGIT_2HEX(pkt[i] % 16));
-      }
+       for (int i = 0; i < pkt_size; i++)      
+        Serial.print(pkt[i], HEX);
       Serial.println();
     }
     else if (result & uWAVE_PKT_ITG_RESULT_RECEIVED)
@@ -391,6 +386,27 @@ void loop() {
       
 #else
 
+#ifdef USE_SEND_PACKETS
+
+      else if (!uWrapper.isWaitingRemote() && !uWrapper.isWaitingPacketACK() && !uWrapper.isWaitingPacketITG() && !uWrapper.isWaitingPacketACK() && (millis() - rem_req_ts >= REMOTE_PKT_SEND_PERIOD_MS))
+      {
+
+        pkt[0] = 1;
+        pkt[1] = 2;
+        pkt[2] = 3;
+        pkt_size = 3;
+
+        if (uWrapper.queryForPktSend(REMOTE_PKT_ADDR, PKT_MAX_TRIES, pkt, pkt_size))
+        {
+           Serial.println(F("Sending a packet..."));
+           rem_req_ts = millis();
+        }
+        else
+           Serial.println(F("Failed to send a packet!"));
+      }
+
+
+#else
       else if (!uWrapper.isWaitingRemote() && !uWrapper.isWaitingPacketACK() && !uWrapper.isWaitingPacketITG() && (millis() - rem_req_ts >= REMOTE_REQUEST_PERIOD_MS))
       {
         if (uWrapper.queryForPktITG(REMOTE_PKT_ADDR, REMOTE_PKT_DID))
@@ -401,11 +417,9 @@ void loop() {
         else
            Serial.println(F("Failed to query a remote modem!"));
       }
-
 #endif
 
-
-
+#endif
       
     }
   }
